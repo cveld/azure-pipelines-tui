@@ -3,12 +3,12 @@
 A terminal UI for live-following Azure DevOps pipeline runs, with streaming logs via SignalR.
 
 ```
-┌ Pipeline ──────────────┐┌ Logs — Initialize job ──────────────────────────────┐
-│ ▼ ✓ build              ││ ##[section]Starting: Initialize job                  │
-│   ▶ ✓ Initialize job   ││ Agent name: 'myorg-pool-agent-abc123'                │
-│   ▶ ▶ Terraform plan   ││ Agent machine name: 'myorg-pool-agent-abc123'        │
-│   ○ Terraform apply    ││ Current agent version: '4.273.0'                     │
-│ ⊘ 14 stages skipped   ││ Agent running as: 'agentuser'                        │
+┌ Pipeline ──────────────┐┌ Logs — Initialize job ───────────────────────────────┐
+│ v + build              ││ ##[section]Starting: Initialize job                  │
+│   > + Initialize job   ││ Agent name: 'myorg-pool-agent-abc123'                │
+│   > > Terraform plan   ││ Agent machine name: 'myorg-pool-agent-abc123'        │
+│   . Terraform apply    ││ Current agent version: '4.273.0'                     │
+│ ~ 14 stages skipped    ││ Agent running as: 'agentuser'                        │
 └────────────────────────┘└──────────────────────────────────────────────────────┘
 ```
 
