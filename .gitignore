@@ -427,3 +427,11 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Claude
+node_modules/
+CLAUDE.local.md
+signalr-messages.jsonl
+signalr-negotiate.json
+timeline-debug.json
+downloaded/
