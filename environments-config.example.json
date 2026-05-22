@@ -1,0 +1,13 @@
+{
+  "org": "MyOrg",
+  "project": "MyProject",
+  "azConfigDir": null,
+  "mappings": [
+    {
+      "environmentId": 1,
+      "environmentName": "production",
+      "pipelineId": 42,
+      "pipelineName": "Deploy-to-prod"
+    }
+  ]
+}

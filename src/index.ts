@@ -25,6 +25,7 @@ interface TimelineRecord {
   parentId?: string | null;
   type: string;
   name: string;
+  identifier?: string;   // stage reference name used in the stages API
   state: "pending" | "inProgress" | "completed";
   result?: string;
   order?: number;
@@ -67,6 +68,7 @@ Keys:
   ←Esc    Collapse / back to tree
   Tab     Switch focus between panels
   f       Follow mode (tail logs)
+  r       Retry/restart selected stage
   q       Quit
 `);
   process.exit(exitCode);
@@ -144,6 +146,37 @@ function httpGet<T>(reqUrl: string, token: string, accept = "application/json"):
   });
 }
 
+function httpPatch<T>(reqUrl: string, token: string, body: unknown): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(reqUrl);
+    const payload = JSON.stringify(body);
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      },
+      res => {
+        let data = "";
+        res.on("data", (c: string) => (data += c));
+        res.on("end", () => {
+          if ((res.statusCode ?? 0) >= 400)
+            return reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          resolve((data ? JSON.parse(data) : {}) as T);
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 // ── Tree helpers ──────────────────────────────────────────────────────────────
 interface RegularItem {
   kind: "regular";
@@ -170,7 +203,11 @@ function isEntirelySkipped(r: TimelineRecord, byParent: Map<string | undefined, 
   return (byParent.get(r.id) ?? []).every(c => isEntirelySkipped(c, byParent));
 }
 
-function buildFlatTree(records: TimelineRecord[], collapsed: Set<string>): FlatItem[] {
+function buildFlatTree(
+  records: TimelineRecord[],
+  collapsed: Set<string>,
+  expandedGroups: Set<string>,
+): FlatItem[] {
   const knownIds = new Set(records.map(r => r.id));
   const byParent = new Map<string | undefined, TimelineRecord[]>();
 
@@ -185,46 +222,43 @@ function buildFlatTree(records: TimelineRecord[], collapsed: Set<string>): FlatI
   const result: FlatItem[] = [];
 
   function walk(parentId: string | undefined, depth: number) {
-    const siblings = byParent.get(parentId) ?? [];
-    let i = 0;
-    while (i < siblings.length) {
-      const r = siblings[i];
+    const siblings   = byParent.get(parentId) ?? [];
+    const allSkipped = siblings.filter(r => isEntirelySkipped(r, byParent));
 
-      // At any depth, group 2+ consecutive entirely-skipped siblings
+    let groupEmitted = false;
+
+    for (const r of siblings) {
       if (isEntirelySkipped(r, byParent)) {
-        const groupStart = i;
-        while (i < siblings.length && isEntirelySkipped(siblings[i], byParent)) i++;
-        const groupRecords = siblings.slice(groupStart, i);
-
-        if (groupRecords.length >= 2) {
-          const typeName = depth === 0 ? "stages" : "steps";
-          const groupId  = `__grp_${groupRecords[0].id}`;
-          const isExpanded = !collapsed.has(groupId);
+        if (allSkipped.length < 2) {
+          // Single skipped item – show normally
+          const hasChildren = (byParent.get(r.id) ?? []).length > 0;
+          result.push({ kind: "regular", record: r, depth, hasChildren, isExpanded: !collapsed.has(r.id) });
+          if (hasChildren && !collapsed.has(r.id)) walk(r.id, depth + 1);
+        } else if (!groupEmitted) {
+          // Emit one group node for ALL skipped siblings at this level
+          const typeName  = depth === 0 ? "stages" : "steps";
+          const groupId   = `__grp_${allSkipped[0].id}`;
+          const isExpanded = expandedGroups.has(groupId);
           result.push({ kind: "group", id: groupId, depth,
-            count: groupRecords.length,
-            label: `${groupRecords.length} ${typeName} skipped`,
+            count: allSkipped.length,
+            label: `${allSkipped.length} ${typeName} skipped`,
             isExpanded });
           if (isExpanded) {
-            for (const gr of groupRecords) {
+            for (const gr of allSkipped) {
               const hasChildren = (byParent.get(gr.id) ?? []).length > 0;
               result.push({ kind: "regular", record: gr, depth, hasChildren, isExpanded: !collapsed.has(gr.id) });
               if (hasChildren && !collapsed.has(gr.id)) walk(gr.id, depth + 1);
             }
           }
-        } else {
-          // Single skipped item – show normally
-          const gr = groupRecords[0];
-          const hasChildren = (byParent.get(gr.id) ?? []).length > 0;
-          result.push({ kind: "regular", record: gr, depth, hasChildren, isExpanded: !collapsed.has(gr.id) });
-          if (hasChildren && !collapsed.has(gr.id)) walk(gr.id, depth + 1);
+          groupEmitted = true;
         }
+        // remaining skipped siblings are absorbed into the group already emitted
       } else {
-        const kids = byParent.get(r.id) ?? [];
+        const kids       = byParent.get(r.id) ?? [];
         const hasChildren = kids.length > 0;
         const isExpanded  = !collapsed.has(r.id);
         result.push({ kind: "regular", record: r, depth, hasChildren, isExpanded });
         if (hasChildren && isExpanded) walk(r.id, depth + 1);
-        i++;
       }
     }
   }
@@ -283,7 +317,8 @@ async function main() {
   let build: Build | null = null;
   let records: TimelineRecord[] = [];
   const logCache   = new Map<number, string[]>();  // logId → all lines seen
-  const collapsed  = new Set<string>();
+  const collapsed      = new Set<string>();
+  const expandedGroups = new Set<string>();
   let treeItems: FlatItem[] = [];
   let selectedId: string | null = null;
   let followLog = true;
@@ -384,7 +419,7 @@ async function main() {
     const sel    = (treeList as blessed.Widgets.ListElement & { selected: number }).selected ?? 0;
     const prevId = treeItems[sel] ? itemId(treeItems[sel]) : undefined;
 
-    treeItems = buildFlatTree(records, collapsed);
+    treeItems = buildFlatTree(records, collapsed, expandedGroups);
     (treeList as blessed.Widgets.ListElement).setItems(treeItems.map(itemLabel) as unknown as string[]);
 
     if (prevId) {
@@ -412,12 +447,12 @@ async function main() {
     screen.render();
   }
 
-  function updateFooter(msg?: string) {
+  function updateFooter(msg?: string, msgColor = "red") {
     const live  = followLog && selectedId ? "  {green-fg}● LIVE{/}" : "";
     const base  =
       " {cyan-fg}↑↓{/} Navigate  {cyan-fg}Enter/→{/} Select  {cyan-fg}←/Esc{/} Back  " +
-      "{cyan-fg}Tab{/} Switch  {cyan-fg}f{/} Follow  {cyan-fg}q{/} Quit";
-    footer.setContent(base + live + (msg ? `  {red-fg}${msg}{/}` : ""));
+      "{cyan-fg}Tab{/} Switch  {cyan-fg}f{/} Follow  {cyan-fg}r{/} Retry stage  {cyan-fg}q{/} Quit";
+    footer.setContent(base + live + (msg ? `  {${msgColor}-fg}${msg}{/}` : ""));
     screen.render();
   }
 
@@ -480,9 +515,8 @@ async function main() {
     if (!item) return;
 
     if (item.kind === "group") {
-      // Toggle the skipped group
-      if (collapsed.has(item.id)) collapsed.delete(item.id);
-      else collapsed.add(item.id);
+      if (expandedGroups.has(item.id)) expandedGroups.delete(item.id);
+      else expandedGroups.add(item.id);
       refreshTree();
       return;
     }
@@ -502,7 +536,7 @@ async function main() {
     if (!item) return;
 
     if (item.kind === "group") {
-      if (!collapsed.has(item.id)) { collapsed.add(item.id); refreshTree(); }
+      if (expandedGroups.has(item.id)) { expandedGroups.delete(item.id); refreshTree(); }
       return;
     }
 
@@ -517,6 +551,41 @@ async function main() {
         (treeList as blessed.Widgets.ListElement).select(pIdx);
         screen.render();
       }
+    }
+  });
+
+  treeList.key("r", async () => {
+    const sel  = (treeList as blessed.Widgets.ListElement & { selected: number }).selected ?? 0;
+    const item = treeItems[sel];
+    if (!item || item.kind !== "regular" || item.record.type !== "Stage") return;
+    if (item.record.state !== "completed") {
+      updateFooter(`Stage "${item.record.name}" is not completed (state: ${item.record.state})`, "yellow");
+      setTimeout(() => updateFooter(), 3_000);
+      return;
+    }
+    const stageRef = item.record.identifier ?? item.record.name;
+    try {
+      updateFooter(`Restarting "${item.record.name}" (ref: ${stageRef})…`, "yellow");
+      const token = await getToken();
+      await httpPatch<unknown>(
+        `${ADO_BASE}/stages/${encodeURIComponent(stageRef)}?${API_VER}`,
+        token,
+        { forceRetryAllJobs: true, state: 1, retryDependencies: true }
+      );
+      updateFooter(`Stage "${item.record.name}" restarted`, "green");
+      setTimeout(() => updateFooter(), 3_000);
+      poll();
+    } catch (e) {
+      const raw = (e as Error).message;
+      const bodyMatch = raw.match(/^HTTP \d+: ([\s\S]+)/);
+      let msg = raw;
+      if (bodyMatch) {
+        try { msg = (JSON.parse(bodyMatch[1]) as { message?: string }).message ?? bodyMatch[1]; }
+        catch { msg = bodyMatch[1]; }
+      }
+      footer.setContent(`  {red-fg}Restart failed: ${msg}{/}`);
+      screen.render();
+      setTimeout(() => updateFooter(), 5_000);
     }
   });
 
@@ -682,7 +751,7 @@ async function main() {
       updateFooter((e as Error).message.slice(0, 60));
     }
 
-    setTimeout(poll, 500);
+    setTimeout(poll, 1000);
   }
 
   poll();

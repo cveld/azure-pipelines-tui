@@ -48,6 +48,7 @@ npx tsx index.ts ORG/PROJECT 1234 --keep-timestamps
 | `←` `Esc` | Collapse / back to tree |
 | `Tab` | Switch focus between tree and log panel |
 | `f` `End` | Follow mode — tail the log |
+| `r` | Retry/restart the selected stage |
 | `q` `Ctrl+C` | Quit |
 
 ### Debug — `debugSignalR.ts`
