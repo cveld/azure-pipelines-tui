@@ -1,6 +1,6 @@
 {
   "name": "azure-pipelines-tui",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Azure Pipelines TUI",
   "bin": {
     "azure-pipelines-tui": "./dist/tui.js"
