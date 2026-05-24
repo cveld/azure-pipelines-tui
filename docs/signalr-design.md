@@ -1,4 +1,26 @@
-# Azure DevOps SignalR — Key Learnings
+# Azure DevOps SignalR — Design & Key Learnings
+
+## Overview
+
+The TUI uses ASP.NET SignalR 1.x over WebSocket to stream live log lines and build events without polling. The connection flow is:
+
+```
+negotiate → wss://...connect → /start → WatchBuild(projectId, buildId)
+```
+
+The WebSocket requires the bearer token in two places — as an `Authorization` header and as the `Sec-WebSocket-Protocol` subprotocol value, otherwise the server responds with a 302 redirect.
+
+## Hub Events
+
+| Method | Action |
+|--------|--------|
+| `logConsoleLines` | Streams log lines directly into the log panel |
+| `timelineRecordsUpdated` | Triggers a REST poll to refresh the tree |
+| `buildUpdated` / `buildUpdated2` | Triggers a REST poll to refresh the header |
+
+---
+
+# URL Structure (ASP.NET SignalR 1.x)
 
 ## URL Structure (ASP.NET SignalR 1.x)
 
@@ -46,3 +68,9 @@ Map `stepRecordId` → `records.find(r => r.id === stepRecordId)` → `rec.log.i
 ### Other hub methods (trigger REST poll)
 - `timelineRecordsUpdated` (camelCase from server)
 - `BuildUpdated`, `TimelineUpdated`, `JobAssigned`, `JobStarted`, `JobCompleted`
+
+# Note
+The SignalR streaming API is undocumented. We reverse-engineered it by downloading and analysing the Azure DevOps web app bundles with Claude:
+
+* https://cdn.vsassets.io/ext/ms.vss-build-web/run/ms.vss-build-web.run.es6.Utcc_6.min.js
+* https://cdn.vsassets.io/ext/ms.vss-features/signalr/ms.vss-features.signalr.es6.yu31LS.min.js

@@ -1,10 +1,17 @@
 {
-  "name": "azure-pipeline-log-streamer",
-  "version": "1.0.0",
+  "name": "azure-pipelines-tui",
+  "version": "0.5.0",
   "description": "Azure Pipelines TUI log viewer",
+  "bin": {
+    "azure-pipelines-tui": "./dist/tui.js"
+  },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
-    "start": "tsx index.ts",
+    "start": "tsx src/tui.ts",
     "build": "tsc",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
