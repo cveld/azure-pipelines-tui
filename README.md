@@ -1,6 +1,10 @@
 # Azure Pipelines TUI
 
-A terminal UI for live-following Azure DevOps pipeline runs, with streaming logs via SignalR.
+A terminal UI for Azure DevOps pipelines. Two standout features:
+
+### Live pipeline run viewer
+
+Follow a running or completed pipeline build in real time. A stage/job tree on the left streams log output on the right via SignalR — no browser required.
 
 ```
 ┌ Pipeline ──────────────┐┌ Logs — Initialize job ───────────────────────────────┐
@@ -10,6 +14,24 @@ A terminal UI for live-following Azure DevOps pipeline runs, with streaming logs
 │   . Terraform apply    ││ Current agent version: '4.273.0'                     │
 │ ~ 14 stages skipped    ││ Agent running as: 'agentuser'                        │
 └────────────────────────┘└──────────────────────────────────────────────────────┘
+```
+
+### Stages dashboard for GitOps
+
+Per-branch overview of Plan/Apply stage pairs across recent runs. Shows the current deployment state for every branch at a glance — and when a run failed, also shows the last successful result alongside it.
+
+```
+  Stage / Branch                Plan                  Apply
+┌ Stages: Deploy-to-prod (48 runs) ────────────────────────────────────────────┐
+│  Deploy                                                                       │
+│    main                        ✓ 5m                  ✓ 2h                    │
+│    feature/PLAT-123            ✗ 30m (✓2d)           -                       │
+│    release/v1.2                ✓ 1h                  ✓ 3h                    │
+│                                                                               │
+│  Infra                                                                        │
+│    main                        ✓ 1h                  ✗ 3h (✓1d)             │
+│    feature/PLAT-456            ○ wait                -                       │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Requirements
@@ -39,6 +61,37 @@ npx azure-pipelines-tui <build-url>                   # Single pipeline run (ful
 | `f` `End` | Follow mode — tail the log |
 | `r` | Retry/restart selected stage |
 | `q` `Ctrl+C` | Quit |
+
+## Stages dashboard
+
+Status icons:
+
+| Icon | Meaning |
+|------|---------|
+| `✓ 5m` | Succeeded, finished 5 minutes ago |
+| `✗ 30m (✓2d)` | Failed, last success was 2 days ago |
+| `▶ –` | In progress |
+| `⚠ 5m` | Succeeded with warnings |
+| `⊘ –` | Skipped / canceled, no prior run |
+| `○ –` | Pending |
+| `-` | Stage did not run |
+
+The `*` suffix (e.g. `✓ 2d *`) means the most recent run was skipped or canceled — the cell shows the last active run instead.
+
+### Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` `↓` | Navigate rows |
+| `Enter` | Open the run in the browser |
+| `r` | Refresh data |
+| `b` | Open pipeline summary in browser |
+| `p` | Go to pipelines list |
+| `e` | Go to environments overview |
+| `Esc` | Back |
+| `q` | Quit |
+
+See [docs/stages-dashboard-design.md](docs/stages-dashboard-design.md) for the full design.
 
 ## How to run locally
 

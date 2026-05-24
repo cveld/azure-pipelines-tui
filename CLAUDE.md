@@ -25,10 +25,11 @@
 - `src/index.ts` — original single-build TUI
 - `src/environments-dashboard.ts` — original environments/stages TUI
 
-#### Debug scripts
-- `src/debugSignalR.ts` — dumps all SignalR messages to console
-- `src/debugRetry.ts` — tests stage retry API calls
-- `src/debugWarnings.ts` — warning/error counts per stage/job/task for a build
+#### `src/debug/` — debug scripts
+- `src/debug/debugSignalR.ts` — dumps all SignalR messages to console
+- `src/debug/debugRetry.ts` — tests stage retry API calls
+- `src/debug/debugWarnings.ts` — warning/error counts per stage/job/task for a build
+- `src/debug/debugOrgs.ts` — lists accessible orgs and their projects
 
 ### Docs (`docs/`)
 - `docs/signalr-design.md` — SignalR URL structure, auth, and hub methods
@@ -50,10 +51,11 @@ npx tsx src/tui.ts https://dev.azure.com/ORG/PROJECT/_build/results?buildId=<id>
 npx tsx src/tui.ts ORG/PROJECT <buildId>                    # Pipeline Run
 
 # Debug scripts
-npx tsx src/debugSignalR.ts ORG/PROJECT <buildId>
-npx tsx src/debugWarnings.ts ORG/PROJECT <buildId>
-npx tsx src/debugWarnings.ts ORG/PROJECT <buildId> --logs   # also prints ##[warning] log lines
-npx tsx src/debugRetry.ts ORG/PROJECT <buildId> [stageRef]
+npx tsx src/debug/debugSignalR.ts ORG/PROJECT <buildId>
+npx tsx src/debug/debugWarnings.ts ORG/PROJECT <buildId>
+npx tsx src/debug/debugWarnings.ts ORG/PROJECT <buildId> --logs   # also prints ##[warning] log lines
+npx tsx src/debug/debugRetry.ts ORG/PROJECT <buildId> [stageRef]
+npx tsx src/debug/debugOrgs.ts
 ```
 
 ## ADO API gotchas

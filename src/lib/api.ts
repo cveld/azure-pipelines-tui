@@ -7,7 +7,7 @@ import { readCache, writeCache } from "../cache.js";
 import type {
   AzTokenResponse, AdoEnvironment, DeploymentRecord, BuildInfo,
   PipelineDefinition, PipelineRun, StageInfo, Build, Timeline, LogContent,
-  DashboardConfig,
+  DashboardConfig, AdoOrg, AdoProject,
 } from "./types.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -256,4 +256,22 @@ export async function fetchLogLines(
   return httpGet<LogContent>(
     `${buildBase(org, project, buildId)}/logs/${logId}?startLine=${startLine}&${API_VER}`, token
   ).catch(() => null);
+}
+
+export async function fetchOrgs(token: string): Promise<AdoOrg[]> {
+  const conn = await httpGet<{ authenticatedUser: { id: string } }>(
+    `https://app.vssps.visualstudio.com/_apis/connectionData`, token
+  );
+  const memberId = conn.authenticatedUser.id;
+  const data = await httpGet<{ value: AdoOrg[] }>(
+    `https://app.vssps.visualstudio.com/_apis/accounts?memberId=${memberId}&api-version=7.1-preview.1`, token
+  );
+  return (data.value ?? []).sort((a, b) => a.accountName.localeCompare(b.accountName));
+}
+
+export async function fetchProjects(org: string, token: string): Promise<AdoProject[]> {
+  const data = await httpGet<{ value: AdoProject[] }>(
+    `https://dev.azure.com/${enc(org)}/_apis/projects?$top=200&stateFilter=wellFormed&${API_VER}`, token
+  );
+  return (data.value ?? []).sort((a, b) => a.name.localeCompare(b.name));
 }

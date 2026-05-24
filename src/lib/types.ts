@@ -1,5 +1,8 @@
 // Domain types shared across screens
 
+export interface AdoOrg { accountId: string; accountName: string; }
+export interface AdoProject { id: string; name: string; description?: string; state: string; }
+
 export interface AzTokenResponse { accessToken: string; expiresOn: string; }
 export interface AdoEnvironment { id: number; name: string; description?: string; }
 export interface DeploymentRecord {

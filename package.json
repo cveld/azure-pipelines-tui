@@ -1,7 +1,7 @@
 {
   "name": "azure-pipelines-tui",
-  "version": "0.5.0",
-  "description": "Azure Pipelines TUI log viewer",
+  "version": "0.5.2",
+  "description": "Azure Pipelines TUI",
   "bin": {
     "azure-pipelines-tui": "./dist/tui.js"
   },

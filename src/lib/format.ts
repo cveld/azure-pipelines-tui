@@ -147,12 +147,13 @@ export function formatEnvItem(item: FlatEnvItem): string {
       return `{bold}${left}{/}${rowColumns(item.ownRow)}${childBadge}`;
     }
     let stats = "";
-    if (item.ok > 0)   stats += ` {green-fg}${item.ok}✓{/}`;
-    if (item.fail > 0) stats += ` {red-fg}${item.fail}✗{/}`;
+    if (item.ok > 0)   stats += `{green-fg}${item.ok}✓{/} `;
+    if (item.fail > 0) stats += `{red-fg}${item.fail}✗{/} `;
     const other = item.total - item.ok - item.fail;
-    if (other > 0)     stats += ` {gray-fg}${other}…{/}`;
-    if (!stats && item.total === 0) stats = ` {gray-fg}empty{/}`;
-    return `{bold}${left}{/}${stats}`;
+    if (other > 0)     stats += `{gray-fg}${other}…{/}`;
+    if (!stats && item.total === 0) stats = `{gray-fg}empty{/}`;
+    const pipeBlank = " " + " ".repeat(36);
+    return `{bold}${left}{/}${pipeBlank} ${stats.trim()}`;
   }
   const pfx = indent + (item.isLast ? "└─ " : "├─ ");
   const label = padEnd(item.label, Math.max(1, LEFT_COL - 1 - pfx.length));

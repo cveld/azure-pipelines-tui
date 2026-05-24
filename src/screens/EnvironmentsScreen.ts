@@ -16,12 +16,17 @@ export class EnvironmentsScreen {
   private rows: EnvRow[] = [];
   private flatItems: FlatEnvItem[] = [];
   private collapsed = new Set<string>();
+  private helpVisible = false;
 
   get footerText(): string {
-    return (
-      " {cyan-fg}↑↓{/} Navigate  {cyan-fg}Enter{/} Expand/Stages  {cyan-fg}←{/} Collapse  " +
-      "{cyan-fg}p{/} Pipelines  {cyan-fg}m{/} Mapping  {cyan-fg}r{/} Refresh  {cyan-fg}c{/} Clear  {cyan-fg}q{/} Quit"
-    );
+    if (this.helpVisible) {
+      return (
+        " {cyan-fg}↑↓{/} Navigate  {cyan-fg}Enter{/} Run/Expand  {cyan-fg}s{/} Stages  {cyan-fg}←→{/} Collapse/Expand" +
+        "  {cyan-fg}b{/} Browser  {cyan-fg}p{/} Pipelines  {cyan-fg}m{/} Mapping" +
+        "  {cyan-fg}r{/} Refresh  {cyan-fg}c{/} Clear cache  {cyan-fg}h{/} Close help  {cyan-fg}q{/} Quit"
+      );
+    }
+    return " {cyan-fg}↑↓{/} Navigate  {cyan-fg}Enter{/} Run/Expand  {cyan-fg}s{/} Stages  {cyan-fg}p{/} Pipelines  {cyan-fg}←→{/} Collapse/Expand  {cyan-fg}b{/} Browser  {cyan-fg}h{/} Help  {cyan-fg}q{/} Quit";
   }
 
   constructor(
@@ -76,27 +81,35 @@ export class EnvironmentsScreen {
     return this.flatItems[idx];
   }
 
-  private async openStagesForRow(row: EnvRow): Promise<void> {
-    if (!row.mapping) {
-      const bid = row.deploy?.owner?.id ? Number(row.deploy.owner.id) : 0;
-      if (!bid) return;
-      const url = `https://dev.azure.com/${this.ctx.org}/${this.ctx.project}/_build/results?buildId=${bid}`;
-      try { spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref(); } catch {}
-      return;
-    }
-    let pip = this.ctx.state.pipelines.find(p => p.id === row.mapping!.pipelineId);
+  private navigateRunForRow(row: EnvRow): void {
+    const bid = row.deploy?.owner?.id ? Number(row.deploy.owner.id) : 0;
+    if (bid) this.ctx.navigate({ view: "pipelineRun", buildId: String(bid) });
+    else this.ctx.setStatus("No deployment found for this environment");
+  }
+
+  private async navigateStagesForRow(row: EnvRow): Promise<void> {
+    const pipelineId = row.mapping?.pipelineId ?? row.deploy?.definition?.id;
+    if (!pipelineId) { this.ctx.setStatus("No pipeline found for this environment"); return; }
+    let pip = this.ctx.state.pipelines.find(p => p.id === pipelineId);
     if (!pip) {
       this.ctx.setStatus("Loading pipeline definitions…", 0);
       try {
         await this.ctx.loadPipelineDefinitions();
-        pip = this.ctx.state.pipelines.find(p => p.id === row.mapping!.pipelineId);
+        pip = this.ctx.state.pipelines.find(p => p.id === pipelineId);
       } catch (e) {
         this.ctx.setStatus(`Error: ${(e as Error).message.slice(0, 80)}`, 5000);
         return;
       }
     }
     if (pip) this.ctx.navigate({ view: "stages", pipeline: pip });
-    else this.ctx.setStatus(`Pipeline ${row.mapping.pipelineId} not found`);
+    else this.ctx.setStatus(`Pipeline ${pipelineId} not found`);
+  }
+
+  private openBrowserForRow(row: EnvRow): void {
+    const bid = row.deploy?.owner?.id ? Number(row.deploy.owner.id) : 0;
+    if (!bid) { this.ctx.setStatus("No deployment found for this environment"); return; }
+    const url = `https://dev.azure.com/${this.ctx.org}/${this.ctx.project}/_build/results?buildId=${bid}`;
+    try { spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref(); } catch {}
   }
 
   private async loadData(): Promise<void> {
@@ -156,6 +169,20 @@ export class EnvironmentsScreen {
       this.loadData();
     });
     this.widget.key("c", () => { clearAllCache(); this.ctx.setStatus("All caches cleared"); });
+    this.widget.key("h", () => {
+      this.helpVisible = !this.helpVisible;
+      this.ctx.setStatus("", 0);
+    });
+    this.widget.key("b", () => {
+      const item = this.selected();
+      if (!item || item.kind !== "leaf") return;
+      this.openBrowserForRow(item.row);
+    });
+    this.widget.key("s", () => {
+      const item = this.selected();
+      if (!item || item.kind !== "leaf") return;
+      this.navigateStagesForRow(item.row);
+    });
     this.widget.key("enter", () => {
       const item = this.selected();
       if (!item) return;
@@ -164,7 +191,7 @@ export class EnvironmentsScreen {
         else this.collapsed.add(item.key);
         this.refresh();
       } else {
-        this.openStagesForRow(item.row);
+        this.navigateRunForRow(item.row);
       }
     });
     this.widget.key("left", () => {
@@ -180,6 +207,12 @@ export class EnvironmentsScreen {
           if (idx >= 0) { (this.widget as any).select(idx); this.screen.render(); }
         }
       }
+    });
+    this.widget.key("right", () => {
+      const item = this.selected();
+      if (!item || item.kind !== "group" || item.isExpanded) return;
+      this.collapsed.delete(item.key);
+      this.refresh();
     });
   }
 }

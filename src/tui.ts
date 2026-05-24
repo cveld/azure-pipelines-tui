@@ -13,6 +13,8 @@ import { StagesScreen }        from "./screens/StagesScreen.js";
 import { PipelineRunsScreen }  from "./screens/PipelineRunsScreen.js";
 import { PipelineRunScreen }   from "./screens/PipelineRunScreen.js";
 import { MappingScreen }       from "./screens/MappingScreen.js";
+import { OrgsScreen }          from "./screens/OrgsScreen.js";
+import { ProjectsScreen }      from "./screens/ProjectsScreen.js";
 
 // ── CLI args ──────────────────────────────────────────────────────────────────
 
@@ -21,12 +23,12 @@ function showHelp(): never {
 Azure Pipelines TUI
 
 Usage:
-  npx tsx src/tui.ts ORG/PROJECT                  Pipelines Overview (default)
-  npx tsx src/tui.ts ORG/PROJECT --envs            Environments Overview
-  npx tsx src/tui.ts ORG/PROJECT --stages <id>     Stages Dashboard
-  npx tsx src/tui.ts ORG/PROJECT --runs <id>       Pipeline Runs List
-  npx tsx src/tui.ts <build-url>                   Pipeline Run (single build)
-  npx tsx src/tui.ts ORG/PROJECT <buildId>         Pipeline Run (single build)
+  npx azure-pipelines-tui ORG/PROJECT                  Pipelines Overview (default)
+  npx azure-pipelines-tui ORG/PROJECT --envs            Environments Overview
+  npx azure-pipelines-tui ORG/PROJECT --stages <id>     Stages Dashboard
+  npx azure-pipelines-tui ORG/PROJECT --runs <id>       Pipeline Runs List
+  npx azure-pipelines-tui <build-url>                   Pipeline Run (single build)
+  npx azure-pipelines-tui ORG/PROJECT <buildId>         Pipeline Run (single build)
 
 Options:
   --config <file>       Config file (default: environments-config.json)
@@ -94,6 +96,7 @@ if (INITIAL_BUILD_ID)     INITIAL_VIEW = "pipelineRun";
 else if (STAGES_ARG)      INITIAL_VIEW = "stages";
 else if (RUNS_ARG)        INITIAL_VIEW = "runs";
 else if (ENVS_FLAG)       INITIAL_VIEW = "environments";
+else if (!ORG)            INITIAL_VIEW = "orgs";
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -101,15 +104,15 @@ async function main() {
   const config = loadConfig(CONFIG_FILE) as DashboardConfig;
   if (!ORG) ORG = config.org ?? "";
   if (!PROJECT) PROJECT = config.project ?? "";
-  if (!ORG || !PROJECT) {
+  if ((!ORG || !PROJECT) && INITIAL_VIEW !== "orgs") {
     console.error(
       "Error: org/project required. Pass as 'org/project' argument or set in environments-config.json.\n" +
       "Run with --help for usage."
     );
     process.exit(1);
   }
-  config.org = ORG;
-  config.project = PROJECT;
+  if (ORG) config.org = ORG;
+  if (PROJECT) config.project = PROJECT;
 
   // ── Shared state ──────────────────────────────────────────────────────────
   const state: AppState = { pipelines: [] };
@@ -128,7 +131,7 @@ async function main() {
   const headerBox = blessed.box({
     parent: screen, top: 0, left: 0, width: "100%", height: 1, tags: true,
     style: { bg: "blue", fg: "white", bold: true },
-    content: ` {bold}Azure Pipelines TUI{/bold}  ${ORG} / ${PROJECT}`,
+    content: ` {bold}Azure Pipelines TUI{/bold}`,
   });
 
   const footerBox = blessed.box({
@@ -154,7 +157,11 @@ async function main() {
 
   function updateHeader() {
     let content: string;
-    if (currentView === "pipelineRun") {
+    if (currentView === "orgs") {
+      content = ` {bold}Azure Pipelines TUI{/bold}  Select organization`;
+    } else if (currentView === "projects") {
+      content = ` {bold}Azure Pipelines TUI{/bold}  ${ORG}  — Select project`;
+    } else if (currentView === "pipelineRun") {
       const run = screens.pipelineRun;
       const build = run.getBuild();
       const id = run.getBuildId();
@@ -202,6 +209,8 @@ async function main() {
     currentView = dest.view;
     hideAll();
     switch (dest.view) {
+      case "orgs":         screens.orgs.show(); break;
+      case "projects":     screens.projects.show(dest.org); break;
       case "pipelines":    screens.pipelines.show(); break;
       case "environments": screens.environments.show(); break;
       case "mapping":      screens.mapping.show(); break;
@@ -219,14 +228,19 @@ async function main() {
 
   // ── App context ────────────────────────────────────────────────────────────
   const ctx: AppContext = {
-    org: ORG,
-    project: PROJECT,
+    get org() { return ORG; },
+    get project() { return PROJECT; },
     config,
     state,
     getToken: () => getToken(config.azConfigDir),
     navigate,
     goBack,
     setStatus,
+    setOrgProject(org: string, project: string) {
+      ORG = org; PROJECT = project;
+      config.org = org; config.project = project;
+      state.pipelines = [];
+    },
     loadPipelineDefinitions: async () => {
       if (state.pipelines.length > 0) return;
       setStatus("Loading pipeline definitions…", 0);
@@ -243,6 +257,8 @@ async function main() {
   // ── Create screens ─────────────────────────────────────────────────────────
   const envScreen  = new EnvironmentsScreen(screen, ctx);
   const screens = {
+    orgs:         new OrgsScreen(screen, ctx),
+    projects:     new ProjectsScreen(screen, ctx),
     pipelines:    new PipelinesScreen(screen, ctx),
     environments: envScreen,
     stages:       new StagesScreen(screen, ctx),
@@ -263,7 +279,9 @@ async function main() {
   });
 
   // ── Initial navigation ────────────────────────────────────────────────────
-  if (INITIAL_VIEW === "pipelineRun" && INITIAL_BUILD_ID) {
+  if (INITIAL_VIEW === "orgs") {
+    navigate({ view: "orgs" });
+  } else if (INITIAL_VIEW === "pipelineRun" && INITIAL_BUILD_ID) {
     navigate({ view: "pipelineRun", buildId: INITIAL_BUILD_ID });
   } else if (INITIAL_VIEW === "stages" && STAGES_ARG) {
     navigate({ view: "pipelines" });
@@ -292,6 +310,7 @@ async function main() {
   } else {
     navigate({ view: "pipelines" });
   }
+
 }
 
 main().catch(err => {

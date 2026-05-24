@@ -1,8 +1,10 @@
 import type { DashboardConfig, PipelineDefinition } from "../lib/types.js";
 
-export type View = "pipelines" | "environments" | "stages" | "runs" | "pipelineRun" | "mapping";
+export type View = "orgs" | "projects" | "pipelines" | "environments" | "stages" | "runs" | "pipelineRun" | "mapping";
 
 export type NavDestination =
+  | { view: "orgs" }
+  | { view: "projects"; org: string }
   | { view: "pipelines" }
   | { view: "environments" }
   | { view: "stages"; pipeline: PipelineDefinition }
@@ -24,4 +26,5 @@ export interface AppContext {
   goBack(): void;
   setStatus(msg: string, ttlMs?: number): void;
   loadPipelineDefinitions(): Promise<void>;
+  setOrgProject(org: string, project: string): void;
 }
